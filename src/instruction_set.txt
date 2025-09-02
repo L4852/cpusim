@@ -1,0 +1,49 @@
+____________     0000      00000000000000000
+                   4               18
+    EXTRA       OPCODE            DATA
+
+ 0b_0000_000000000000000000
+
+0 - NO_OP
+
+1 - LOAD_IMMED (lod)
+XXXX DDDD_DDDD_DDDD_DDDD_RR
+D - immediate data,  R - destination register address
+
+
+2 - ADD (add)
+XXXX XXXX_XXXX_XXXX_AA_BB_CC
+AA - REG A, BB - REG B, CC - REG C
+AA + BB -> CC
+
+3 - SUB (sub)
+XXXX XXXX_XXXX_XXXX_AA_BB_CC
+AA - REG A, BB - REG B, CC - REG C
+AA + BB -> CC
+
+4 - CMP (cmp)
+XXXX DDDD_DDDD_DDDD_DDDD_RR
+D - immediate data, R comparison register address
+(comparison using R - D)*
+
+5 - JMP (jmp)
+XXXX XXXX_XXXX_XXXX_X_JJJJJ
+J - jump destination address
+
+6 - JEQ (jeq) [jump if equal]
+XXXX XXXX_XXXX_XXXX_X_JJJJJ
+J - jump destination address
+
+7 - JGT (jgt) [jump if greater than]
+XXXX XXXX_XXXX_XXXX_X_JJJJJ
+J - jump destination address
+
+8 - JLT (jlt) [jump if less than]
+XXXX XXXX_XXXX_XXXX_X_JJJJJ
+J - jump destination address
+
+9 - STO (sto) [store from register to ram]
+XXXX XXXX_XXXX_XX_MMMMMM_RR
+MMMMMM - ram memory address, RR - register address
+
+15 - HALT (hlt)
