@@ -1,51 +1,19 @@
 use std::fmt::Arguments;
 use std::fs::File;
-use std::io::{self, Read};
-use std::{thread, time::Duration};
+use std::io::Write;
+use std::ops::Add;
+use std::thread;
+use std::time::Duration;
 
 struct Processor {
-    registers: [u32; 4],
     program_counter: usize,
     ram: [u32; 64],
     flag_register: u32,
+    registers: [u32; 4],
     halt: bool,
     debug: bool,
 }
 
-fn print_as_assembly(instruction: u32) {
-    let opcode = instruction >> 18;
-
-    // Take lower 18 bits
-    let operand = instruction & (!(0b1111 << 18));
-
-    let mut final_string = String::new();
-
-    match opcode {
-        0 => final_string.push_str("NO-OP "),
-        1 => {
-            final_string.push_str("LOAD_IMMED ");
-
-            let immediate_value = operand >> 2;
-            let target_register = operand & (!(0b1111 << 2));
-
-            final_string.push_str(&u32::to_string(&immediate_value));
-            final_string.push_str(" R");
-            final_string.push_str(&u32::to_string(&target_register));
-        }
-        2 => final_string.push_str("ADD "),
-        3 => final_string.push_str("SUB "),
-        4 => final_string.push_str("CMP_IMMED "),
-        5 => final_string.push_str("JMP "),
-        6 => final_string.push_str("JMP_EQ "),
-        7 => final_string.push_str("JMP_GT "),
-        8 => final_string.push_str("JMP_LT "),
-        9 => final_string.push_str("STO"),
-        15 => final_string.push_str("HALT"),
-        _ => {}
-    }
-
-    println!("{}", final_string);
-}
 impl Processor {
     fn new(use_debug: bool) -> Processor {
         Processor {
@@ -59,7 +27,7 @@ impl Processor {
     }
 
     fn debug_print(&self, text: Arguments) {
-        if (self.debug == true) {
+        if self.debug == true {
             println!("{}", text);
         }
     }
@@ -137,13 +105,25 @@ impl Processor {
 
                 if result > 0 {
                     self.flag_register = 1;
-                    self.debug_print(format_args!("\nCMP -> [{}] (GT)", self.flag_register));
+                    self.debug_print(format_args!(
+                        "\n{} -> [{}] (GT)",
+                        get_opcode_name(4, true),
+                        self.flag_register
+                    ));
                 } else if result == 0 {
                     self.flag_register = 2;
-                    self.debug_print(format_args!("\nCMP -> [{}] (EQ)", self.flag_register));
+                    self.debug_print(format_args!(
+                        "\n{} -> [{}] (EQ)",
+                        get_opcode_name(4, true),
+                        self.flag_register
+                    ));
                 } else if result < 0 {
                     self.flag_register = 3;
-                    self.debug_print(format_args!("\nCMP -> [{}] (LT)", self.flag_register));
+                    self.debug_print(format_args!(
+                        "\n{} -> [{}] (LT)",
+                        get_opcode_name(4, true),
+                        self.flag_register
+                    ));
                 } else {
                     self.flag_register = 0;
                 }
@@ -154,7 +134,11 @@ impl Processor {
 
                 self.program_counter = jump_addr as usize;
 
-                self.debug_print(format_args!("\nJMP -> [{}]", self.program_counter));
+                self.debug_print(format_args!(
+                    "\n{} -> [{}]",
+                    get_opcode_name(5, true),
+                    self.program_counter
+                ));
             }
             // Jump if equal
             6 => {
@@ -164,7 +148,11 @@ impl Processor {
                     self.program_counter = jump_addr as usize - 1;
                     self.flag_register = 0;
                 }
-                self.debug_print(format_args!("\nJEQ -> [{}]", self.program_counter));
+                self.debug_print(format_args!(
+                    "\n{} -> [{}]",
+                    get_opcode_name(6, true),
+                    self.program_counter
+                ));
             }
             7 => {
                 let jump_addr = operand & (0b11111);
@@ -173,7 +161,11 @@ impl Processor {
                     self.program_counter = jump_addr as usize - 1;
                     self.flag_register = 0;
                 }
-                self.debug_print(format_args!("\nJGT -> [{}]", self.program_counter));
+                self.debug_print(format_args!(
+                    "\n{} -> [{}]",
+                    get_opcode_name(7, true),
+                    self.program_counter
+                ));
             }
             8 => {
                 let jump_addr = operand & (0b11111);
@@ -182,7 +174,11 @@ impl Processor {
                     self.program_counter = jump_addr as usize - 1;
                     self.flag_register = 0;
                 }
-                self.debug_print(format_args!("\nJLT -> [{}]", self.program_counter));
+                self.debug_print(format_args!(
+                    "\n{} -> [{}]",
+                    get_opcode_name(8, true),
+                    self.program_counter
+                ));
             }
             // Store from register to RAM
             9 => {
@@ -192,8 +188,25 @@ impl Processor {
 
                 self.ram[ram_addr as usize] = self.registers[reg_addr as usize];
                 self.debug_print(format_args!(
-                    "\nSTO -> R{}: ({}) -> RAM[{}]",
-                    reg_addr as i32, self.registers[reg_addr as usize], ram_addr as i32
+                    "\n{} -> | R{}: ({}) -> RAM[{}]",
+                    get_opcode_name(9, true),
+                    reg_addr as i32,
+                    self.registers[reg_addr as usize],
+                    ram_addr as i32
+                ));
+            }
+            10 => {
+                let reg_addr = operand & (0b11);
+                let ram_addr = (operand & (0b111111 << 2)) >> 2;
+                println!("R[{}]", reg_addr);
+
+                self.registers[reg_addr as usize] = self.ram[ram_addr as usize];
+                self.debug_print(format_args!(
+                    "\n{} -> | RAM[{}] ({}) -> R{}",
+                    get_opcode_name(9, true),
+                    ram_addr as i32,
+                    self.registers[reg_addr as usize],
+                    reg_addr as i32
                 ));
             }
             15 => {
@@ -205,7 +218,7 @@ impl Processor {
         }
     }
 
-    fn run(&mut self, bin: &Vec<u32>, cycle_delay_ms: u16) {
+    pub(crate) fn run(&mut self, bin: &Vec<u32>, cycle_delay_ms: u16) {
         self.load_program(bin);
         println!("====================");
         println!("Program loaded.");
@@ -253,7 +266,6 @@ impl Processor {
         self.run(&program, 250);
     }
 }
-
 fn assemble(program_str: &str) -> Vec<u32> {
     let program = program_str.parse::<String>().unwrap();
     // Construct machine code instruction based on input terms
@@ -264,15 +276,15 @@ fn assemble(program_str: &str) -> Vec<u32> {
 
     for &ins in input_instructions.iter() {
         let mut output_ins: u32 = 0b0;
-        let mut opcode: u32 = 0b0;
-        let mut operand: u32 = 0b0;
+        let opcode: u32;
+        let mut operand: u32;
 
         // Separate terms from instruction
         let terms: Vec<&str> = ins.split_whitespace().collect::<Vec<&str>>();
 
         // Replace opcode term with its corresponding machine code
         match terms[0] {
-            "lod" => output_ins = 0b0001,
+            "ldi" => output_ins = 0b0001,
             "add" => output_ins = 0b0010,
             "sub" => output_ins = 0b0011,
             "cmp" => output_ins = 0b0100,
@@ -281,16 +293,17 @@ fn assemble(program_str: &str) -> Vec<u32> {
             "jgt" => output_ins = 0b0111,
             "jlt" => output_ins = 0b1000,
             "sto" => output_ins = 0b1001,
+            "lod" => output_ins = 0b1010,
             "hlt" => output_ins = 0b1111,
             _ => {}
         }
 
         opcode = output_ins;
-        
+
         output_ins <<= 18;
 
         // Parse operand depending on opcode
-        match (opcode) {
+        match opcode {
             // Extract immediate value and register address from address string
             1 => {
                 operand = terms[1].chars().collect::<String>().parse::<u32>().unwrap() << 2;
@@ -325,7 +338,88 @@ fn assemble(program_str: &str) -> Vec<u32> {
                     .collect::<String>()
                     .parse::<u32>()
                     .unwrap();
-                
+
+                output_ins = output_ins | operand;
+                output_instructions.push(output_ins);
+            }
+            3 => {
+                operand = terms[1]
+                    .chars()
+                    .skip(1)
+                    .collect::<String>()
+                    .parse::<u32>()
+                    .unwrap()
+                    << 4;
+                operand |= terms[2]
+                    .chars()
+                    .skip(1)
+                    .collect::<String>()
+                    .parse::<u32>()
+                    .unwrap()
+                    << 2;
+                operand |= terms[3]
+                    .chars()
+                    .skip(1)
+                    .collect::<String>()
+                    .parse::<u32>()
+                    .unwrap();
+
+                output_ins = output_ins | operand;
+                output_instructions.push(output_ins);
+            }
+            4 => {
+                operand = terms[1].chars().collect::<String>().parse::<u32>().unwrap() << 2;
+                operand |= terms[2]
+                    .chars()
+                    .skip(1)
+                    .collect::<String>()
+                    .parse::<u32>()
+                    .unwrap();
+
+                output_ins = output_ins | operand;
+                output_instructions.push(output_ins);
+            }
+            5 => {
+                operand = terms[1].chars().collect::<String>().parse::<u32>().unwrap();
+                output_ins = output_ins | operand;
+                output_instructions.push(output_ins);
+            }
+            6 => {
+                operand = terms[1].chars().collect::<String>().parse::<u32>().unwrap();
+                output_ins = output_ins | operand;
+                output_instructions.push(output_ins);
+            }
+            7 => {
+                operand = terms[1].chars().collect::<String>().parse::<u32>().unwrap();
+                output_ins = output_ins | operand;
+                output_instructions.push(output_ins);
+            }
+            8 => {
+                operand = terms[1].chars().collect::<String>().parse::<u32>().unwrap();
+                output_ins = output_ins | operand;
+                output_instructions.push(output_ins);
+            }
+            9 => {
+                operand = terms[1].chars().collect::<String>().parse::<u32>().unwrap() << 2;
+                operand |= terms[2]
+                    .chars()
+                    .skip(1)
+                    .collect::<String>()
+                    .parse::<u32>()
+                    .unwrap();
+
+                output_ins = output_ins | operand;
+                output_instructions.push(output_ins);
+            }
+            10 => {
+                operand = terms[1].chars().collect::<String>().parse::<u32>().unwrap() << 2;
+                operand |= terms[2]
+                    .chars()
+                    .skip(1)
+                    .collect::<String>()
+                    .parse::<u32>()
+                    .unwrap();
+
                 output_ins = output_ins | operand;
                 output_instructions.push(output_ins);
             }
@@ -349,14 +443,137 @@ fn assemble(program_str: &str) -> Vec<u32> {
     output_instructions
 }
 
+fn get_opcode_name(opcode: u32, use_uppercase: bool) -> String {
+    let mut name: String = String::from(match opcode {
+        0 => "nop",
+        1 => "ldi",
+        2 => "add",
+        3 => "sub",
+        4 => "cmp",
+        5 => "jmp",
+        6 => "jgt",
+        7 => "jeq",
+        8 => "jlt",
+        9 => "sto",
+        10 => "lod",
+        15 => "hlt",
+        _ => "",
+    });
+
+    if use_uppercase {
+        name = name.to_ascii_uppercase();
+    }
+
+    name
+}
+
+fn get_opcode_name_long(opcode: u32) -> String {
+    let name: String = String::from(match opcode {
+        0 => "NO-OP",
+        1 => "LOAD IMMEDIATE",
+        2 => "ADD",
+        3 => "SUBTRACT",
+        4 => "COMPARE",
+        5 => "JUMP",
+        6 => "JUMP IF GREATER THAN",
+        7 => "JUMP IF EQUAL",
+        8 => "JUMP IF LESS THAN",
+        9 => "STORE",
+        10 => "LOAD",
+        15 => "HALT",
+        _ => "",
+    });
+
+    let output = name.add("\n");
+    output
+}
+
+pub(crate) fn print_as_assembly(instruction: u32) {
+    let opcode = instruction >> 18;
+
+    // Take lower 18 bits
+    let operand = instruction & (!(0b1111 << 18));
+
+    let mut final_string = String::new();
+
+    final_string.push_str(get_opcode_name_long(opcode).as_str());
+
+    match opcode {
+        0 => {}
+        1 => {
+            let immediate_value = operand >> 2;
+            let target_register = operand & (!(0b1111 << 2));
+
+            final_string.push_str(&u32::to_string(&immediate_value));
+            final_string.push_str(" R");
+            final_string.push_str(&u32::to_string(&target_register));
+        }
+        2 => {}
+        3 => {}
+        4 => {}
+        5 => {}
+        6 => {}
+        7 => {}
+        8 => {}
+        9 => {}
+        15 => {}
+        _ => {}
+    }
+
+    println!("{}", final_string);
+}
+
+fn print_program_as_assembly(program: &Vec<u32>) {
+    for &ins in program.iter() {
+        print_as_assembly(ins);
+    }
+}
+
+fn print_raw_bytes_as_hex(bytes: &Vec<u8>) {
+    for byte in bytes {
+        print!("{:02X} ", byte);
+    }
+}
+
+fn print_machine_code_bin(machine_code: &Vec<u32>) {
+    for (idx, ins) in machine_code.iter().enumerate() {
+        println!("({}) - [{:022b}]", idx, ins);
+    }
+}
+
+// Convert machine code to raw bytes in Little-Endian
+fn machine_code_as_bin_raw(program: &Vec<u32>) -> Vec<u8> {
+    let raw_bytes: Vec<u8> = program.iter().flat_map(|x| x.to_le_bytes()).collect();
+    raw_bytes
+}
+
+// Convert raw bytes to machine code
+fn bin_raw_as_machine_code(bytes: &Vec<u8>) -> Vec<u32> {
+    let machine_code: Vec<u32> = bytes
+        .chunks_exact(4)
+        .map(|x| u32::from_le_bytes(x.try_into().unwrap()))
+        .collect();
+    machine_code
+}
+
+fn write_bytes_to_file(data: Vec<u8>) {
+    let mut file = File::create("test.bin").unwrap();
+    file.write_all(&data).unwrap();
+}
+
+fn assemble_from_file() -> Vec<u32> {
+    let file = std::fs::read_to_string("src/test_files/test.asm").unwrap();
+    let assembled = assemble(&file);
+
+    assembled
+}
+
 fn main() {
     let mut cpu = Processor::new(true);
-    cpu.demo();
+    // cpu.demo();
+    //
 
-    let assembled_program: Vec<u32> = assemble("lod 5 r1\nlod 4 r2\nadd r1 r2 r2\nhlt");
-    
-    println!("Assembled program: {:022b}", &assembled_program[0]);
-    
-    cpu.run(&assembled_program, 500);
-    
+    let program: Vec<u32> = assemble_from_file();
+
+    cpu.run(&program, 0);
 }

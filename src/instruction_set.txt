@@ -6,7 +6,7 @@ ____________     0000      00000000000000000
 
 0 - NO_OP
 
-1 - LOAD_IMMED (lod)
+1 - LOAD_IMMED (ldi)
 XXXX DDDD_DDDD_DDDD_DDDD_RR
 D - immediate data,  R - destination register address
 
@@ -42,7 +42,11 @@ J - jump destination address
 XXXX XXXX_XXXX_XXXX_X_JJJJJ
 J - jump destination address
 
-9 - STO (sto) [store from register to ram]
+9 - STO (sto) [store from register to RAM]
+XXXX XXXX_XXXX_XX_MMMMMM_RR
+MMMMMM - ram memory address, RR - register address
+
+10 - LOD (lod) [load from RAM to register]
 XXXX XXXX_XXXX_XX_MMMMMM_RR
 MMMMMM - ram memory address, RR - register address
 
